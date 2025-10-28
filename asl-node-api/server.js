@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const axios = require('axios');
 const User = require('./models/User');
 const PredictionLog = require('./models/PredictionLog');
+const Translation = require('./models/Translation');
 
 const app = express();
 
@@ -622,6 +623,172 @@ app.get('/api/stats/summary', authenticateToken, requireAdmin, async (req, res) 
         res.status(500).json({ 
             success: false, 
             error: 'Failed to fetch stats' 
+        });
+    }
+});
+
+// Save translation
+app.post('/api/translations', authenticateToken, async (req, res) => {
+    try {
+        const { text, confidence_scores, session_id } = req.body;
+        
+        if (!text || text.trim().length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Text is required'
+            });
+        }
+
+        const translation = new Translation({
+            user_id: req.user.id,
+            text: text.trim(),
+            confidence_scores: confidence_scores || [],
+            session_id: session_id || null
+        });
+
+        await translation.save();
+
+        res.status(201).json({
+            success: true,
+            translation: {
+                id: translation._id.toString(),
+                text: translation.text,
+                word_count: translation.word_count,
+                character_count: translation.character_count,
+                created_at: translation.created_at.toISOString()
+            }
+        });
+    } catch (error) {
+        console.error('Save translation error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to save translation'
+        });
+    }
+});
+
+// Get translations for current user
+app.get('/api/translations', authenticateToken, async (req, res) => {
+    try {
+        const { page = 1, page_size = 10, search } = req.query;
+        const limit = Math.min(parseInt(page_size), 100);
+        const skip = (parseInt(page) - 1) * limit;
+
+        const query = { user_id: req.user.id };
+        
+        // Add search functionality
+        if (search) {
+            query.text = { $regex: search, $options: 'i' };
+        }
+
+        const [translations, total] = await Promise.all([
+            Translation.find(query)
+                .sort({ created_at: -1 })
+                .limit(limit)
+                .skip(skip)
+                .exec(),
+            Translation.countDocuments(query)
+        ]);
+
+        res.json({
+            success: true,
+            translations: translations.map(t => ({
+                id: t._id.toString(),
+                text: t.text,
+                word_count: t.word_count,
+                character_count: t.character_count,
+                created_at: t.created_at.toISOString()
+            })),
+            total,
+            page: parseInt(page),
+            page_size: limit
+        });
+    } catch (error) {
+        console.error('Get translations error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get translations'
+        });
+    }
+});
+
+// Delete translation
+app.delete('/api/translations/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const translation = await Translation.findOne({
+            _id: id,
+            user_id: req.user.id
+        }).exec();
+
+        if (!translation) {
+            return res.status(404).json({
+                success: false,
+                error: 'Translation not found'
+            });
+        }
+
+        await Translation.findByIdAndDelete(id);
+
+        res.json({
+            success: true,
+            message: 'Translation deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete translation error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete translation'
+        });
+    }
+});
+
+// Get translation statistics (admin only)
+app.get('/api/translations/stats', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const [
+            totalTranslations,
+            avgWordCount,
+            topUsers,
+            recentActivity
+        ] = await Promise.all([
+            Translation.countDocuments(),
+            Translation.aggregate([
+                { $group: { _id: null, avg: { $avg: '$word_count' } } }
+            ]),
+            Translation.aggregate([
+                { $group: { _id: '$user_id', count: { $sum: 1 } } },
+                { $sort: { count: -1 } },
+                { $limit: 5 },
+                { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+                { $unwind: '$user' },
+                { $project: { email: '$user.email', count: 1 } }
+            ]),
+            Translation.aggregate([
+                { $match: { created_at: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } },
+                { $group: { 
+                    _id: { $dateToString: { format: '%Y-%m-%d', date: '$created_at' } },
+                    count: { $sum: 1 }
+                }},
+                { $sort: { _id: 1 } }
+            ])
+        ]);
+
+        res.json({
+            success: true,
+            stats: {
+                total_translations: totalTranslations,
+                average_word_count: avgWordCount[0]?.avg || 0,
+                top_users: topUsers,
+                recent_activity: recentActivity
+            }
+        });
+    } catch (error) {
+        console.error('Get translation stats error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get translation statistics'
         });
     }
 });

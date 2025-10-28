@@ -284,3 +284,81 @@ export function videoFrameToBase64(
   const quality = options?.quality ?? 0.95;
   return canvas.toDataURL(format, quality).split(',')[1];
 }
+
+export interface SaveTranslationResponse {
+  success: boolean;
+  translation?: {
+    id: string;
+    text: string;
+    word_count: number;
+    created_at: string;
+  };
+  error?: string;
+}
+
+/**
+ * Save a translated text to the database
+ * @param text - The translated text to save
+ */
+export async function saveTranslation(text: string): Promise<SaveTranslationResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/translations`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to save translation');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Save translation error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+export interface GetTranslationsResponse {
+  success: boolean;
+  translations?: Array<{
+    id: string;
+    text: string;
+    word_count: number;
+    created_at: string;
+  }>;
+  total?: number;
+  page?: number;
+  page_size?: number;
+  error?: string;
+}
+
+/**
+ * Get saved translations for the current user
+ * @param page - Page number (default: 1)
+ * @param pageSize - Number of items per page (default: 10)
+ */
+export async function getTranslations(page: number = 1, pageSize: number = 10): Promise<GetTranslationsResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/translations?page=${page}&page_size=${pageSize}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get translations');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Get translations error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}

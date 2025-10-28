@@ -3,21 +3,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Copy, Trash2, Space, Delete, Volume2, VolumeX } from "lucide-react";
+import { Copy, Trash2, Space, Delete, Volume2, VolumeX, Check, Save } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { saveTranslation } from "@/lib/aslApi";
 
 interface RecognitionPanelProps {
   currentSign?: string;
   confidence?: number;
+  onTranslationSaved?: () => void;
 }
 
-export const RecognitionPanel = ({ currentSign = '', confidence = 0 }: RecognitionPanelProps) => {
+export const RecognitionPanel = ({ currentSign = '', confidence = 0, onTranslationSaved }: RecognitionPanelProps) => {
   const [text, setText] = useState("");
   const [lastSign, setLastSign] = useState("");
   const [holdTime, setHoldTime] = useState(0);
   const [speechEnabled, setSpeechEnabled] = useState(false);
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const HOLD_THRESHOLD = 1.2; // Reduced for better accessibility
   const CONF_THRESHOLD = 0.6; // More accessible threshold
   const HIGH_CONF_THRESHOLD = 0.85; // fast-path appending
@@ -131,6 +134,46 @@ export const RecognitionPanel = ({ currentSign = '', confidence = 0 }: Recogniti
     toast({ title: "Text cleared" });
   };
 
+  const saveText = async () => {
+    if (!text.trim()) {
+      toast({
+        title: "Nothing to save",
+        description: "Please translate some text first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const result = await saveTranslation(text.trim());
+      if (result.success) {
+        toast({
+          title: "Translation saved!",
+          description: `Saved "${text.trim()}" with ${result.translation?.word_count} words`
+        });
+        // Notify parent component to refresh history
+        onTranslationSaved?.();
+        // Optionally clear the text after saving
+        // setText("");
+      } else {
+        toast({
+          title: "Failed to save",
+          description: result.error || "Could not save translation",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Save error",
+        description: "An error occurred while saving",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Recognized Text Card */}
@@ -165,15 +208,30 @@ export const RecognitionPanel = ({ currentSign = '', confidence = 0 }: Recogniti
               )}
             </p>
             {text && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => speakText(text)}
-                className="absolute top-2 right-2"
-                title="Read text aloud"
-              >
-                <Volume2 className="h-4 w-4" />
-              </Button>
+              <div className="absolute top-2 right-2 flex gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => speakText(text)}
+                  title="Read text aloud"
+                >
+                  <Volume2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={saveText}
+                  disabled={isSaving}
+                  title="Save translation"
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isSaving ? (
+                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             )}
           </div>
 
@@ -225,6 +283,20 @@ export const RecognitionPanel = ({ currentSign = '', confidence = 0 }: Recogniti
             >
               <Trash2 className="h-3 w-3" />
               Clear
+            </Button>
+            <Button 
+              size="sm" 
+              variant="default"
+              onClick={saveText}
+              disabled={!text || isSaving}
+              className="flex items-center gap-1 bg-green-600 hover:bg-green-700"
+            >
+              {isSaving ? (
+                <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Save className="h-3 w-3" />
+              )}
+              {isSaving ? 'Saving...' : 'Save'}
             </Button>
           </div>
         </CardContent>

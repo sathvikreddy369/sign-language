@@ -98,6 +98,12 @@ VITE_API_URL=http://localhost:4000
 - `POST /api/predict-batch` - Batch image prediction
 - `GET /api/labels` - Get available ASL labels
 
+### Translations (requires authentication)
+- `POST /api/translations` - Save translated text
+- `GET /api/translations` - Get user's saved translations
+- `DELETE /api/translations/:id` - Delete a translation
+- `GET /api/translations/stats` - Translation statistics (admin only)
+
 ### Admin (requires admin role)
 - `GET /api/users` - List all users
 - `PATCH /api/users/:id` - Update user

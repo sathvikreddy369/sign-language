@@ -13,10 +13,15 @@ const TranslatePage = () => {
   const [tab, setTab] = useState<'webcam' | 'upload'>('webcam');
   const [currentSign, setCurrentSign] = useState<string>('');
   const [confidence, setConfidence] = useState<number>(0);
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   const handlePrediction = (prediction: string, conf: number) => {
     setCurrentSign(prediction);
     setConfidence(conf);
+  };
+
+  const handleTranslationSaved = () => {
+    setRefreshTrigger(prev => prev + 1);
   };
 
   return (
@@ -74,7 +79,11 @@ const TranslatePage = () => {
 
         {/* Recognition Panel */}
         <div className="lg:col-span-1 xl:col-span-1">
-          <RecognitionPanel currentSign={currentSign} confidence={confidence} />
+          <RecognitionPanel 
+            currentSign={currentSign} 
+            confidence={confidence} 
+            onTranslationSaved={handleTranslationSaved}
+          />
         </div>
       </div>
 
@@ -101,7 +110,7 @@ const TranslatePage = () => {
 
       {/* History Panel */}
       <div>
-        <HistoryPanel />
+        <HistoryPanel refreshTrigger={refreshTrigger} />
       </div>
     </div>
   );

@@ -10,7 +10,8 @@ import {
   Trash2, 
   Search,
   Filter,
-  MoreVertical
+  MoreVertical,
+  RefreshCw
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -19,7 +20,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getTranslations } from "@/lib/aslApi";
 
 export interface HistoryItem {
   id: string;
@@ -29,41 +31,53 @@ export interface HistoryItem {
   wordCount?: number;
 }
 
-export const HistoryPanel = ({ items = [] }: { items?: HistoryItem[] }) => {
+export const HistoryPanel = ({ items = [], refreshTrigger }: { items?: HistoryItem[], refreshTrigger?: number }) => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [translations, setTranslations] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   
-  const sampleItems: HistoryItem[] = [
-    { 
-      id: '1', 
-      text: 'Hello, my name is Alex. Nice to meet you!', 
-      ts: new Date().toLocaleString(),
-      confidence: 0.92,
-      wordCount: 8
-    },
-    { 
-      id: '2', 
-      text: 'Thank you for your help today.', 
-      ts: new Date(Date.now() - 3600000).toLocaleString(),
-      confidence: 0.88,
-      wordCount: 6
-    },
-    { 
-      id: '3', 
-      text: 'How are you doing?', 
-      ts: new Date(Date.now() - 7200000).toLocaleString(),
-      confidence: 0.95,
-      wordCount: 4
-    },
-    { 
-      id: '4', 
-      text: 'I love learning sign language.', 
-      ts: new Date(Date.now() - 10800000).toLocaleString(),
-      confidence: 0.87,
-      wordCount: 5
-    },
-  ];
+  // Load translations from the database
+  const loadTranslations = async () => {
+    setLoading(true);
+    try {
+      const result = await getTranslations(page, 10);
+      if (result.success && result.translations) {
+        const formattedTranslations: HistoryItem[] = result.translations.map(t => ({
+          id: t.id,
+          text: t.text,
+          ts: new Date(t.created_at).toLocaleString(),
+          wordCount: t.word_count
+        }));
+        
+        if (page === 1) {
+          setTranslations(formattedTranslations);
+        } else {
+          setTranslations(prev => [...prev, ...formattedTranslations]);
+        }
+        setTotal(result.total || 0);
+      }
+    } catch (error) {
+      console.error('Failed to load translations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const list = items.length ? items : sampleItems;
+  useEffect(() => {
+    loadTranslations();
+  }, [page]);
+
+  // Refresh when trigger changes
+  useEffect(() => {
+    if (refreshTrigger) {
+      refreshTranslations();
+    }
+  }, [refreshTrigger]);
+
+  // Use provided items if any, otherwise use loaded translations
+  const list = items.length ? items : translations;
   
   const filteredItems = list.filter(item =>
     item.text.toLowerCase().includes(searchTerm.toLowerCase())
@@ -112,6 +126,12 @@ export const HistoryPanel = ({ items = [] }: { items?: HistoryItem[] }) => {
     }
   };
 
+  const refreshTranslations = () => {
+    setPage(1);
+    setTranslations([]);
+    loadTranslations();
+  };
+
   const getConfidenceColor = (confidence?: number) => {
     if (!confidence) return "bg-gray-100 text-gray-800";
     if (confidence >= 0.9) return "bg-green-100 text-green-800";
@@ -154,6 +174,11 @@ export const HistoryPanel = ({ items = [] }: { items?: HistoryItem[] }) => {
               <Share2 className="h-4 w-4 mr-1" />
               <span className="hidden sm:inline">Share</span>
             </Button>
+            
+            <Button variant="outline" size="sm" onClick={refreshTranslations} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
           </div>
         </div>
       </CardHeader>
@@ -168,7 +193,9 @@ export const HistoryPanel = ({ items = [] }: { items?: HistoryItem[] }) => {
             <p className="text-gray-600 dark:text-gray-400">
               {searchTerm 
                 ? 'Try adjusting your search terms' 
-                : 'Start translating to see your history here'
+                : loading 
+                  ? 'Loading your saved translations...'
+                  : 'Start translating and save your text to see it here'
               }
             </p>
           </div>
