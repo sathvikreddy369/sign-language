@@ -362,3 +362,202 @@ export async function getTranslations(page: number = 1, pageSize: number = 10): 
     };
   }
 }
+
+// Lesson and Sign API functions
+export interface Lesson {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  level: string;
+  category: string;
+  duration_minutes: number;
+  signs_count?: number;
+  learning_objectives?: string[];
+  signs?: Array<{
+    letter_or_word: string;
+    description: string;
+    image_url?: string;
+    video_url?: string;
+    difficulty: string;
+    tips: string[];
+    common_mistakes: string[];
+  }>;
+  practice_exercises?: Array<{
+    type: string;
+    instruction: string;
+    data: any;
+  }>;
+}
+
+export interface Sign {
+  id: string;
+  word: string;
+  letter?: string;
+  category: string;
+  difficulty: string;
+  description: string;
+  instructions: string;
+  image_url?: string;
+  video_url?: string;
+  gif_url?: string;
+  hand_shape?: string;
+  movement?: string;
+  location?: string;
+  two_handed: boolean;
+  dominant_hand?: string;
+  tags: string[];
+  synonyms: string[];
+  related_signs?: Sign[];
+  tips?: string[];
+  common_mistakes?: string[];
+  cultural_notes?: string;
+  usage_examples: string[];
+  frequency_score: number;
+}
+
+export interface GetLessonsResponse {
+  success: boolean;
+  lessons?: Lesson[];
+  total?: number;
+  page?: number;
+  page_size?: number;
+  error?: string;
+}
+
+export interface GetLessonResponse {
+  success: boolean;
+  lesson?: Lesson;
+  error?: string;
+}
+
+export interface SearchSignsResponse {
+  success: boolean;
+  signs?: Sign[];
+  total?: number;
+  page?: number;
+  page_size?: number;
+  error?: string;
+}
+
+export interface GetSignResponse {
+  success: boolean;
+  sign?: Sign;
+  error?: string;
+}
+
+/**
+ * Get all lessons with optional filtering
+ */
+export async function getLessons(params?: {
+  level?: string;
+  category?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<GetLessonsResponse> {
+  try {
+    const searchParams = new URLSearchParams();
+    if (params?.level) searchParams.append('level', params.level);
+    if (params?.category) searchParams.append('category', params.category);
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.page_size) searchParams.append('page_size', params.page_size.toString());
+
+    const response = await fetch(`${API_BASE_URL}/api/lessons?${searchParams}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get lessons');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Get lessons error, falling back to mock data:', error);
+    // Fall back to mock data when API is not available
+    const { getMockLessons } = await import('./mockAslData');
+    return await getMockLessons(params);
+  }
+}
+
+/**
+ * Get a specific lesson by slug
+ */
+export async function getLesson(slug: string): Promise<GetLessonResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/lessons/${slug}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get lesson');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Get lesson error, falling back to mock data:', error);
+    // Fall back to mock data when API is not available
+    const { getMockLesson } = await import('./mockAslData');
+    return await getMockLesson(slug);
+  }
+}
+
+/**
+ * Search for signs
+ */
+export async function searchSigns(params?: {
+  q?: string;
+  category?: string;
+  difficulty?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<SearchSignsResponse> {
+  try {
+    const searchParams = new URLSearchParams();
+    if (params?.q) searchParams.append('q', params.q);
+    if (params?.category) searchParams.append('category', params.category);
+    if (params?.difficulty) searchParams.append('difficulty', params.difficulty);
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.page_size) searchParams.append('page_size', params.page_size.toString());
+
+    const response = await fetch(`${API_BASE_URL}/api/signs/search?${searchParams}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to search signs');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Search signs error, falling back to mock data:', error);
+    // Fall back to mock data when API is not available
+    const { searchMockSigns } = await import('./mockAslData');
+    return await searchMockSigns(params);
+  }
+}
+
+/**
+ * Get a specific sign by ID
+ */
+export async function getSign(id: string): Promise<GetSignResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/signs/${id}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get sign');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Get sign error, falling back to mock data:', error);
+    // Fall back to mock data when API is not available
+    const { getMockSign } = await import('./mockAslData');
+    return await getMockSign(id);
+  }
+}

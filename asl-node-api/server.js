@@ -9,6 +9,9 @@ const axios = require('axios');
 const User = require('./models/User');
 const PredictionLog = require('./models/PredictionLog');
 const Translation = require('./models/Translation');
+const Lesson = require('./models/Lesson');
+const Sign = require('./models/Sign');
+const UserProgress = require('./models/UserProgress');
 
 const app = express();
 
@@ -789,6 +792,309 @@ app.get('/api/translations/stats', authenticateToken, requireAdmin, async (req, 
         res.status(500).json({
             success: false,
             error: 'Failed to get translation statistics'
+        });
+    }
+});
+
+// Get all lessons
+app.get('/api/lessons', async (req, res) => {
+    try {
+        const { level, category, page = 1, page_size = 20 } = req.query;
+        const limit = Math.min(parseInt(page_size), 50);
+        const skip = (parseInt(page) - 1) * limit;
+
+        const query = { is_published: true };
+        if (level) query.level = level;
+        if (category) query.category = category;
+
+        const [lessons, total] = await Promise.all([
+            Lesson.find(query)
+                .sort({ order: 1, created_at: 1 })
+                .limit(limit)
+                .skip(skip)
+                .select('-signs.tips -signs.common_mistakes')
+                .exec(),
+            Lesson.countDocuments(query)
+        ]);
+
+        res.json({
+            success: true,
+            lessons: lessons.map(lesson => ({
+                id: lesson._id.toString(),
+                title: lesson.title,
+                slug: lesson.slug,
+                description: lesson.description,
+                level: lesson.level,
+                category: lesson.category,
+                duration_minutes: lesson.duration_minutes,
+                signs_count: lesson.signs.length,
+                learning_objectives: lesson.learning_objectives
+            })),
+            total,
+            page: parseInt(page),
+            page_size: limit
+        });
+    } catch (error) {
+        console.error('Get lessons error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get lessons'
+        });
+    }
+});
+
+// Get lesson by slug
+app.get('/api/lessons/:slug', async (req, res) => {
+    try {
+        const { slug } = req.params;
+        const lesson = await Lesson.findOne({ slug, is_published: true }).exec();
+
+        if (!lesson) {
+            return res.status(404).json({
+                success: false,
+                error: 'Lesson not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            lesson: {
+                id: lesson._id.toString(),
+                title: lesson.title,
+                slug: lesson.slug,
+                description: lesson.description,
+                level: lesson.level,
+                category: lesson.category,
+                duration_minutes: lesson.duration_minutes,
+                signs: lesson.signs,
+                learning_objectives: lesson.learning_objectives,
+                practice_exercises: lesson.practice_exercises
+            }
+        });
+    } catch (error) {
+        console.error('Get lesson error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get lesson'
+        });
+    }
+});
+
+// Search signs
+app.get('/api/signs/search', async (req, res) => {
+    try {
+        const { q, category, difficulty, page = 1, page_size = 20 } = req.query;
+        const limit = Math.min(parseInt(page_size), 50);
+        const skip = (parseInt(page) - 1) * limit;
+
+        let query = { is_published: true };
+        
+        if (category) query.category = category;
+        if (difficulty) query.difficulty = difficulty;
+        
+        // Text search if query provided
+        if (q) {
+            query.$text = { $search: q };
+        }
+
+        const [signs, total] = await Promise.all([
+            Sign.find(query)
+                .sort(q ? { score: { $meta: 'textScore' } } : { frequency_score: -1 })
+                .limit(limit)
+                .skip(skip)
+                .select('-common_mistakes -tips -cultural_notes')
+                .exec(),
+            Sign.countDocuments(query)
+        ]);
+
+        res.json({
+            success: true,
+            signs: signs.map(sign => ({
+                id: sign._id.toString(),
+                word: sign.word,
+                letter: sign.letter,
+                category: sign.category,
+                difficulty: sign.difficulty,
+                description: sign.description,
+                instructions: sign.instructions,
+                image_url: sign.image_url,
+                video_url: sign.video_url,
+                gif_url: sign.gif_url,
+                hand_shape: sign.hand_shape,
+                movement: sign.movement,
+                location: sign.location,
+                two_handed: sign.two_handed,
+                tags: sign.tags,
+                synonyms: sign.synonyms,
+                usage_examples: sign.usage_examples,
+                frequency_score: sign.frequency_score
+            })),
+            total,
+            page: parseInt(page),
+            page_size: limit
+        });
+    } catch (error) {
+        console.error('Search signs error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to search signs'
+        });
+    }
+});
+
+// Get sign by ID
+app.get('/api/signs/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const sign = await Sign.findOne({ _id: id, is_published: true })
+            .populate('related_signs', 'word category difficulty image_url')
+            .exec();
+
+        if (!sign) {
+            return res.status(404).json({
+                success: false,
+                error: 'Sign not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            sign: {
+                id: sign._id.toString(),
+                word: sign.word,
+                letter: sign.letter,
+                category: sign.category,
+                difficulty: sign.difficulty,
+                description: sign.description,
+                instructions: sign.instructions,
+                image_url: sign.image_url,
+                video_url: sign.video_url,
+                gif_url: sign.gif_url,
+                hand_shape: sign.hand_shape,
+                movement: sign.movement,
+                location: sign.location,
+                two_handed: sign.two_handed,
+                dominant_hand: sign.dominant_hand,
+                tags: sign.tags,
+                synonyms: sign.synonyms,
+                related_signs: sign.related_signs,
+                tips: sign.tips,
+                common_mistakes: sign.common_mistakes,
+                cultural_notes: sign.cultural_notes,
+                usage_examples: sign.usage_examples,
+                frequency_score: sign.frequency_score
+            }
+        });
+    } catch (error) {
+        console.error('Get sign error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get sign'
+        });
+    }
+});
+
+// Get user progress (requires authentication)
+app.get('/api/progress', authenticateToken, async (req, res) => {
+    try {
+        const progress = await UserProgress.find({ user_id: req.user.id })
+            .populate('lesson_id', 'title slug category level duration_minutes')
+            .sort({ last_accessed: -1 })
+            .exec();
+
+        res.json({
+            success: true,
+            progress: progress.map(p => ({
+                lesson: {
+                    id: p.lesson_id._id.toString(),
+                    title: p.lesson_id.title,
+                    slug: p.lesson_id.slug,
+                    category: p.lesson_id.category,
+                    level: p.lesson_id.level,
+                    duration_minutes: p.lesson_id.duration_minutes
+                },
+                status: p.status,
+                progress_percentage: p.progress_percentage,
+                time_spent_minutes: p.time_spent_minutes,
+                completed_signs_count: p.completed_signs.length,
+                last_accessed: p.last_accessed,
+                bookmarked: p.bookmarked
+            }))
+        });
+    } catch (error) {
+        console.error('Get progress error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get progress'
+        });
+    }
+});
+
+// Update user progress (requires authentication)
+app.post('/api/progress/:lessonId', authenticateToken, async (req, res) => {
+    try {
+        const { lessonId } = req.params;
+        const { sign_id, correct, time_spent } = req.body;
+
+        let progress = await UserProgress.findOne({
+            user_id: req.user.id,
+            lesson_id: lessonId
+        });
+
+        if (!progress) {
+            progress = new UserProgress({
+                user_id: req.user.id,
+                lesson_id: lessonId,
+                status: 'in_progress'
+            });
+        }
+
+        if (sign_id) {
+            const existingSign = progress.completed_signs.find(s => s.sign_id.toString() === sign_id);
+            if (existingSign) {
+                existingSign.attempts += 1;
+                if (correct) existingSign.correct_attempts += 1;
+                existingSign.last_practiced = new Date();
+                
+                // Update mastery level based on performance
+                const accuracy = existingSign.correct_attempts / existingSign.attempts;
+                if (accuracy >= 0.9 && existingSign.attempts >= 5) {
+                    existingSign.mastery_level = 'mastered';
+                } else if (accuracy >= 0.7 && existingSign.attempts >= 3) {
+                    existingSign.mastery_level = 'proficient';
+                } else if (existingSign.attempts >= 2) {
+                    existingSign.mastery_level = 'practicing';
+                }
+            } else {
+                progress.completed_signs.push({
+                    sign_id,
+                    attempts: 1,
+                    correct_attempts: correct ? 1 : 0,
+                    last_practiced: new Date(),
+                    mastery_level: 'learning'
+                });
+            }
+        }
+
+        if (time_spent) {
+            progress.time_spent_minutes += time_spent;
+        }
+
+        await progress.save();
+
+        res.json({
+            success: true,
+            progress: {
+                status: progress.status,
+                progress_percentage: progress.progress_percentage,
+                time_spent_minutes: progress.time_spent_minutes
+            }
+        });
+    } catch (error) {
+        console.error('Update progress error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update progress'
         });
     }
 });
